@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>手势粒子 · Gesture Particles</title>
+<style>
+  :root{
+    --bg:#05060a;
+    --ink:#eef2f8;
+    --dim:#8b93a7;
+    --line:rgba(255,255,255,.10);
+    --glass:rgba(16,19,28,.62);
+    --accent:#63e6ff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    touch-action:none;
+  }
+  #scene{position:fixed;inset:0;display:block;width:100%;height:100%}
+  #vignette{
+    position:fixed;inset:0;pointer-events:none;
+    background:
+      radial-gradient(120% 90% at 50% 42%, rgba(90,140,255,.10) 0%, rgba(0,0,0,0) 55%),
+      radial-gradient(90% 70% at 50% 50%, rgba(0,0,0,0) 45%, rgba(0,0,0,.6) 100%);
+  }
+
+  .brand{position:fixed;top:22px;left:26px;z-index:6;pointer-events:none}
+  .brand h1{margin:0;font-size:15px;font-weight:600;letter-spacing:.14em}
+  .brand p{margin:5px 0 0;font-size:10.5px;color:var(--dim);letter-spacing:.22em}
+
+  .top-actions{position:fixed;top:18px;right:20px;z-index:8;display:flex;gap:8px}
+  .icon-btn{
+    width:38px;height:38px;border-radius:11px;border:1px solid var(--line);
+    background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:.22s;
+  }
+  .icon-btn:hover{border-color:rgba(99,230,255,.55);color:var(--accent);transform:translateY(-1px)}
+  .icon-btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+  .panel{
+    position:fixed;top:72px;right:20px;width:268px;z-index:7;
+    background:var(--glass);border:1px solid var(--line);border-radius:18px;
+    backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);
+    box-shadow:0 18px 50px rgba(0,0,0,.45);
+    padding:16px 16px 14px;
+  }
+  .sec{margin-bottom:16px}
+  .sec:last-child{margin-bottom:0}
+  .sec-title{
+    font-size:10px;letter-spacing:.2em;color:var(--dim);margin:0 0 9px;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .models{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .chip{
+    border:1px solid var(--line);background:rgba(255,255,255,.03);color:#cfd6e4;
+    border-radius:10px;padding:9px 6px;font-size:11.5px;letter-spacing:.05em;
+    cursor:pointer;transition:.2s;font-family:inherit;min-width:0;overflow:hidden;
+    white-space:nowrap;text-overflow:ellipsis;
+  }
+  .chip:hover{background:rgba(99,230,255,.09);border-color:rgba(99,230,255,.4)}
+  .chip.wide{grid-column:span 2}
+  .chip.on{
+    background:linear-gradient(180deg,rgba(99,230,255,.22),rgba(99,230,255,.10));
+    border-color:rgba(99,230,255,.75);color:#eafcff;
+    box-shadow:0 0 0 1px rgba(99,230,255,.18), inset 0 6px 18px rgba(99,230,255,.14);
+  }
+
+  .row{display:flex;align-items:center;gap:10px}
+  .swatch{
+    width:34px;height:34px;border-radius:9px;border:1px solid var(--line);overflow:hidden;
+    position:relative;flex:0 0 auto;cursor:pointer;
+  }
+  .swatch input{position:absolute;inset:-6px;width:200%;height:200%;border:none;padding:0;background:none;cursor:pointer}
+  .mini{
+    font-family:inherit;font-size:10.5px;color:var(--dim);background:transparent;
+    border:1px solid var(--line);border-radius:8px;padding:6px 9px;cursor:pointer;transition:.2s;letter-spacing:.06em;
+  }
+  .mini:hover{color:var(--accent);border-color:rgba(99,230,255,.5)}
+  .hex{font-size:10.5px;color:var(--dim);letter-spacing:.1em;font-variant-numeric:tabular-nums}
+
+  .slider{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+  .slider:last-child{margin-bottom:0}
+  .slider label{display:flex;justify-content:space-between;font-size:11px;color:#b9c1d1}
+  .slider label span{color:var(--dim);font-variant-numeric:tabular-nums}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;height:3px;border-radius:3px;
+    background:rgba(255,255,255,.13);outline:none;width:100%;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:13px;height:13px;border-radius:50%;
+    background:var(--accent);cursor:pointer;box-shadow:0 0 10px rgba(99,230,255,.8);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:13px;height:13px;border:none;border-radius:50%;background:var(--accent);cursor:pointer;
+  }
+
+  .cam-btn{
+    width:100%;padding:10px;border-radius:11px;cursor:pointer;font-family:inherit;font-size:11.5px;
+    letter-spacing:.1em;border:1px solid rgba(99,230,255,.35);
+    background:rgba(99,230,255,.10);color:#d9f8ff;transition:.2s;
+  }
+  .cam-btn:hover{background:rgba(99,230,255,.18)}
+  .cam-btn.on{background:rgba(99,230,255,.22);border-color:rgba(99,230,255,.8)}
+  .cam-btn:disabled{opacity:.55;cursor:default}
+
+  .status{
+    margin-top:9px;font-size:10.5px;color:var(--dim);display:flex;align-items:flex-start;gap:7px;
+    line-height:1.5;min-height:16px;
+  }
+  .dot{width:6px;height:6px;border-radius:50%;background:#4a5265;flex:0 0 auto;margin-top:5px;transition:.25s}
+  .dot.live{background:var(--accent);box-shadow:0 0 9px var(--accent)}
+  .dot.warn{background:#ffb457;box-shadow:0 0 9px #ffb457}
+
+  .preview{
+    position:fixed;left:22px;bottom:22px;z-index:7;width:176px;border-radius:14px;overflow:hidden;
+    border:1px solid var(--line);background:rgba(0,0,0,.5);display:none;
+    box-shadow:0 14px 40px rgba(0,0,0,.5);
+  }
+  .preview.show{display:block}
+  .preview video{display:none}
+  .preview canvas{display:block;width:100%;height:auto}
+  .preview .tag{
+    position:absolute;left:8px;top:7px;font-size:9px;letter-spacing:.16em;color:#9fe9ff;
+    background:rgba(0,0,0,.35);padding:3px 6px;border-radius:5px;
+  }
+
+  .hint{
+    position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:6;
+    font-size:10.5px;letter-spacing:.14em;color:#6f7789;white-space:nowrap;
+    display:flex;gap:16px;pointer-events:none;
+  }
+  .hint b{color:#aab3c4;font-weight:500}
+
+  /* 加载 / 错误遮罩 */
+  #boot{
+    position:fixed;inset:0;z-index:20;display:grid;place-items:center;text-align:center;
+    background:radial-gradient(circle at 50% 45%, #0b1220 0%, #05060a 70%);
+    transition:opacity .6s;padding:24px;
+  }
+  #boot.hide{opacity:0;pointer-events:none}
+  #boot .ring{
+    width:44px;height:44px;border-radius:50%;margin:0 auto 18px;
+    border:2px solid rgba(99,230,255,.15);border-top-color:var(--accent);
+    animation:spin 1s linear infinite;
+  }
+  #boot.err .ring{display:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #boot p{margin:0;font-size:12.5px;color:#c3cbd9;letter-spacing:.1em;line-height:1.9}
+  #boot small{display:block;margin-top:8px;font-size:11px;color:#6f7789;letter-spacing:.04em;line-height:1.9}
+
+  @media (max-width:860px){
+    .panel{
+      top:auto;bottom:12px;left:12px;right:12px;width:auto;padding:12px;
+      border-radius:16px;max-height:52vh;overflow:auto;
+    }
+    .models{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+    .chip{font-size:10.5px;padding:8px 3px;letter-spacing:0}
+    .sec{margin-bottom:12px}
+    .sec-title{margin-bottom:7px}
+    .brand{top:16px;left:16px}
+    .brand h1{font-size:13px}
+    .brand p{font-size:9px}
+    .top-actions{top:12px;right:14px}
+    .hint{display:none}
+    .preview{width:118px;bottom:auto;top:62px;left:14px}
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="vignette"></div>
+
+<div class="brand">
+  <h1>GESTURE&nbsp;PARTICLES</h1>
+  <p>手势驱动 · 实时粒子形态</p>
+</div>
+
+<div class="top-actions">
+  <button class="icon-btn" id="btnFull" title="全屏 (F)">
+    <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+  </button>
+</div>
+
+<div class="panel">
+  <div class="sec">
+    <p class="sec-title"><span>形态模型</span><span id="modelHint">7</span></p>
+    <div class="models" id="models"></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec-title"><span>颜色</span><span class="hex" id="hexLabel">#FF3B7F</span></p>
+    <div class="row">
+      <label class="swatch" title="选择粒子颜色">
+        <input type="color" id="colorPick" value="#ff3b7f" />
+        <span id="swatchFill" style="position:absolute;inset:0;background:#ff3b7f"></span>
+      </label>
+      <button class="mini" id="btnOrigin">恢复原配色</button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <p class="sec-title"><span>参数</span><span></span></p>
+    <div class="slider">
+      <label>粒子大小 <span id="vSize">1.00</span></label>
+      <input type="range" id="sizeRange" min="0.4" max="2.6" step="0.01" value="1" />
+    </div>
+    <div class="slider">
+      <label>扩散强度 <span id="vSpread">0.00</span></label>
+      <input type="range" id="spreadRange" min="0" max="1" step="0.01" value="0" />
+    </div>
+  </div>
+
+  <div class="sec">
+    <p class="sec-title"><span>手势</span><span></span></p>
+    <button class="cam-btn" id="btnCam">开启摄像头手势</button>
+    <div class="status"><i class="dot" id="dot"></i><span id="statusText">等待开启 · 也可用鼠标操作</span></div>
+  </div>
+</div>
+
+<div class="preview" id="preview">
+  <span class="tag">HAND</span>
+  <video id="video" playsinline muted></video>
+  <canvas id="overlay" width="640" height="480"></canvas>
+</div>
+
+<div class="hint">
+  <span><b>拖拽</b> 旋转</span>
+  <span><b>滚轮</b> 缩放</span>
+  <span><b>张开手掌</b> 放大扩散</span>
+  <span><b>握拳</b> 收缩</span>
+  <span><b>单指摇摆</b> 旋转</span>
+  <span><b>单指前后</b> 远近</span>
+</div>
+
+<div id="boot">
+  <div>
+    <div class="ring"></div>
+    <p id="bootText">正在加载 3D 引擎…</p>
+    <small id="bootSub">首次打开需要联网加载 Three.js（已配置多个 CDN 备用）</small>
+  </div>
+</div>
+
+<script type="module">
+/* =========================================================
+   0. 引擎加载（多 CDN 兜底）
+   ========================================================= */
+const boot = document.getElementById('boot');
+const bootText = document.getElementById('bootText');
+const bootSub = document.getElementById('bootSub');
+
+const THREE_URLS = [
+  'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',
+  'https://unpkg.com/three@0.160.0/build/three.module.js',
+  'https://esm.sh/three@0.160.0',
+  'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js',
+  'https://cdn.skypack.dev/three@0.160.0'
+];
+
+let THREE = null;
+for (const url of THREE_URLS) {
+  try {
+    bootText.textContent = '正在加载 3D 引擎…';
+    THREE = await import(url);
+    if (THREE && THREE.WebGLRenderer) break;
+    THREE = null;
+  } catch (e) { /* 尝试下一个 */ }
+}
+if (!THREE) {
+  boot.classList.add('err');
+  bootText.textContent = '无法加载 Three.js';
+  bootSub.textContent = '请检查网络后刷新；若在离线环境，可把 three.module.js 放在同目录并把引用改为本地路径。';
+  throw new Error('three-load-failed');
+}
+THREE.ColorManagement.enabled = false;
+
+/* =========================================================
+   1. 工具
+   ========================================================= */
+const N = window.innerWidth < 820 ? 42000 : 72000;
+const TAU = Math.PI * 2;
+const R = Math.random;
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeIO = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+function unitSphere() {
+  const u = R() * 2 - 1, th = R() * TAU, s = Math.sqrt(Math.max(0, 1 - u * u));
+  return [s * Math.cos(th), u, s * Math.sin(th)];
+}
+function hash3(x, y, z) {
+  const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+function vnoise(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const xf = x - xi, yf = y - yi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+  const c = (i, j, k) => hash3(xi + i, yi + j, zi + k);
+  return lerp(
+    lerp(lerp(c(0,0,0), c(1,0,0), u), lerp(c(0,1,0), c(1,1,0), u), v),
+    lerp(lerp(c(0,0,1), c(1,0,1), u), lerp(c(0,1,1), c(1,1,1), u), v), w);
+}
+function fbm(x, y, z, oct = 5) {
+  let sum = 0, amp = 0.5, f = 1;
+  for (let i = 0; i < oct; i++) { sum += amp * vnoise(x * f, y * f, z * f); f *= 2.03; amp *= 0.5; }
+  return sum;
+}
+
+/* =========================================================
+   2. 七种形态生成器
+   ========================================================= */
+function alloc() { return { pos: new Float32Array(N * 3), col: new Float32Array(N * 3) }; }
+function put(o, i, x, y, z, c) {
+  o.pos[i*3] = x; o.pos[i*3+1] = y; o.pos[i*3+2] = z;
+  o.col[i*3] = c.r; o.col[i*3+1] = c.g; o.col[i*3+2] = c.b;
+}
+
+/* ---------- 爱心 ---------- */
+function buildHeart() {
+  const o = alloc();
+  const cEdge = new THREE.Color('#ff3b7f');
+  const cCore = new THREE.Color('#98103a');
+  const cSpark = new THREE.Color('#ffd9e6');
+  const c = new THREE.Color();
+
+  // 心形参数曲线 + 弧长均匀采样（避免尖点处粒子堆积成白斑）
+  const curve = (t) => [
+    Math.pow(Math.sin(t), 3) * 16,
+    13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t)
+  ];
+  const speed = (t) => Math.hypot(
+    48 * Math.pow(Math.sin(t), 2) * Math.cos(t),
+    -13 * Math.sin(t) + 10 * Math.sin(2*t) + 6 * Math.sin(3*t) + 4 * Math.sin(4*t)
+  );
+  let sMax = 0;
+  for (let i = 0; i < 512; i++) sMax = Math.max(sMax, speed(i / 512 * TAU));
+
+  for (let i = 0; i < N; i++) {
+    let t = R() * TAU, guard = 0;
+    while (R() > speed(t) / sMax && guard++ < 24) t = R() * TAU;
+    const [hx, hy] = curve(t);
+    const nx = hx / 16, ny = (hy + 2.6) / 16;
+
+    const shell = R() < 0.62;
+    const u = shell ? 0.905 + R() * 0.095 : Math.pow(R(), 0.55) * 0.9;
+    let x = nx * u * 2.35, y = ny * u * 2.35;
+    const th = Math.sqrt(Math.max(0, 1 - u * u));
+    let z = (R() * 2 - 1) * 0.80 * th;
+
+    x += (R() - 0.5) * 0.014; y += (R() - 0.5) * 0.014; z += (R() - 0.5) * 0.014;
+
+    c.copy(cCore).lerp(cEdge, 0.25 + 0.75 * u);
+    c.lerp(cSpark, R() < 0.05 ? 0.85 : R() * 0.22);
+    put(o, i, x, y, z, c);
+  }
+  return { pos: o.pos, col: o.col, palette: '#ff3b7f' };
+}
+
+/* ---------- 花朵（花心朝向镜头，花瓣在 XY 平面展开） ---------- */
+function buildFlower() {
+  const o = alloc();
+  const petals = 9;
+  const prand = Array.from({ length: petals }, () => R());
+  const cIn = new THREE.Color('#6d1249');
+  const cMid = new THREE.Color('#ff5fa8');
+  const cTip = new THREE.Color('#ffd3e6');
+  const cGold = new THREE.Color('#ffcf6b');
+  const cWarm = new THREE.Color('#fff3cf');
+  const c = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    if (i < N * 0.09) {
+      // 花蕊
+      const r = Math.pow(R(), 0.62) * 0.30, a = R() * TAU;
+      const z = 0.05 + (0.30 - r) * 0.9 + R() * 0.05;
+      c.copy(cGold).lerp(cWarm, R() * 0.45).multiplyScalar(0.78);
+      put(o, i, Math.cos(a) * r, Math.sin(a) * r, z, c);
+      continue;
+    }
+    const k = (R() * petals) | 0;
+    const a = k / petals * TAU + 0.24 + (prand[k] - 0.5) * 0.2;
+    const u = Math.pow(R(), 0.8);
+    const v = R() * 2 - 1;
+    const wd = Math.pow(Math.sin(Math.PI * Math.min(u, 0.995)), 0.62) * 0.50;
+    const lat = v * wd;
+    const rad = u * 1.62;
+    const x = Math.cos(a) * rad - Math.sin(a) * lat;
+    const y = Math.sin(a) * rad + Math.cos(a) * lat;
+    const z = -0.06 + 0.52 * Math.pow(u, 1.7) + lat * lat * 0.55 + (prand[k] - 0.5) * 0.14;
+
+    c.copy(cIn).lerp(cMid, clamp(u * 1.7, 0, 1)).lerp(cTip, R() * 0.45);
+    if (Math.abs(lat) > wd * 0.82) c.lerp(cTip, 0.35);
+    put(o, i, x + (R() - 0.5) * 0.01, y + (R() - 0.5) * 0.01, z, c);
+  }
+  return { pos: o.pos, col: o.col, palette: '#ff5fa8', expo: 0.74 };
+}
+
+/* ---------- 土星 ---------- */
+function buildSaturn() {
+  const o = alloc();
+  const bodyCols = ['#efd6a6', '#d8b784', '#b8925f', '#e9cfa0'].map(h => new THREE.Color(h));
+  const ringCols = ['#e4d2ac', '#c2a97e', '#f3e6c9', '#a98f66'].map(h => new THREE.Color(h));
+  const cGlow = new THREE.Color('#fff6dc');
+  const c = new THREE.Color();
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.34, 0, 0.22));
+  const v = new THREE.Vector3();
+  for (let i = 0; i < N; i++) {
+    if (R() < 0.5) {
+      const d = unitSphere(), rr = 0.87 * (0.985 + R() * 0.035);
+      v.set(d[0] * rr, d[1] * rr, d[2] * rr);
+      const band = Math.sin(d[1] * Math.PI * 8.6 + 0.7);
+      c.copy(bodyCols[band > 0.55 ? 0 : band > -0.1 ? 1 : band > -0.65 ? 2 : 3]);
+      c.lerp(cGlow, R() * 0.18).multiplyScalar(0.40);
+    } else {
+      let rr;
+      do { rr = 1.14 + R() * 0.98; } while (rr > 1.48 && rr < 1.57);
+      const a = R() * TAU;
+      const thin = 0.03 * (1 - 0.45 * Math.abs(rr - 1.65));
+      v.set(Math.cos(a) * rr, (R() - 0.5) * thin * 2, Math.sin(a) * rr);
+      c.copy(ringCols[(R() * ringCols.length) | 0]).lerp(cGlow, R() * 0.3);
+    }
+    v.applyQuaternion(q);
+    put(o, i, v.x, v.y, v.z, c);
+  }
+  return { pos: o.pos, col: o.col, palette: '#e0c08a', expo: 0.62 };
+}
+
+/* ---------- 烟花（沿射线的花瓣状火星） ---------- */
+function buildFirework() {
+  const o = alloc();
+  const hues = ['#ffd166', '#ff8fb1', '#7fd4ff', '#c9a6ff', '#a8ffcf', '#ffb37f'];
+  const white = new THREE.Color('#ffffff');
+  const bursts = 6, rays = 190;
+  const centers = [], dirs = [];
+  for (let b = 0; b < bursts; b++) {
+    centers.push({
+      p: [(R() * 2 - 1) * 1.45, (R() * 2 - 1) * 0.9 + 0.15, (R() * 2 - 1) * 1.0],
+      rad: 0.62 + R() * 0.5,
+      col: new THREE.Color(hues[b % hues.length])
+    });
+    for (let k = 0; k < rays; k++) dirs.push(unitSphere());
+  }
+  const c = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    const b = i % bursts;
+    const k = Math.floor(i / bursts) % rays;
+    const d = dirs[b * rays + k];
+    const B = centers[b];
+    // 火星集中在外壳附近，形成细射线
+    const t = 0.30 + 0.70 * Math.pow(R(), 0.45);
+    const r = B.rad * t;
+    const jit = 0.006 + 0.012 * (1 - t);
+    const x = B.p[0] + d[0] * r + (R() - 0.5) * jit;
+    const y = B.p[1] + d[1] * r + (R() - 0.5) * jit;
+    const z = B.p[2] + d[2] * r + (R() - 0.5) * jit;
+    c.copy(B.col).multiplyScalar(0.55 + 0.75 * t);
+    if (t > 0.9 && R() < 0.35) c.lerp(white, 0.75);   // 爆点高光
+    if (R() < 0.03) c.lerp(white, 0.9);               // 零星亮星
+    put(o, i, x, y, z, c);
+  }
+  return { pos: o.pos, col: o.col, palette: '#ffd166', expo: 0.85 };
+}
+
+/* ---------- 地球 ---------- */
+function buildEarth() {
+  const o = alloc();
+  const ocean = ['#0a2550', '#1a5f96', '#2a86bd'].map(h => new THREE.Color(h));
+  const land = ['#2c6e42', '#5f8a45', '#b9a56f'].map(h => new THREE.Color(h));
+  const ice = new THREE.Color('#e6f4ff');
+  const iceDeep = new THREE.Color('#bcd8ef');
+  const atmo = new THREE.Color('#9fd8ff');
+  const c = new THREE.Color();
+  const rad = 1.72;
+  for (let i = 0; i < N; i++) {
+    const d = unitSphere();
+    let x = d[0], y = d[1], z = d[2];
+    const n = fbm(x * 1.75 + 4.2, y * 1.75 + 1.3, z * 1.75 + 7.7, 5);
+    const rr = rad * (1 + (R() - 0.5) * 0.006);
+    x *= rr; y *= rr; z *= rr;
+    if (Math.abs(d[1]) > 0.865) {
+      c.copy(ice).lerp(iceDeep, R() * 0.5);
+    } else if (n > 0.515) {
+      c.copy(land[0]).lerp(land[1], clamp((n - 0.5) * 6, 0, 1)).lerp(land[2], Math.pow(R(), 2) * 0.7);
+    } else {
+      c.copy(ocean[0]).lerp(ocean[1], clamp((n / 0.515) * 1.2, 0, 1))
+        .lerp(ocean[2], Math.pow(R(), 2.5) * 0.8);
+    }
+    c.lerp(atmo, R() * 0.08);
+    put(o, i, x, y, z, c);
+  }
+  return { pos: o.pos, col: o.col, palette: '#4aa3d8', expo: 0.92 };
+}
+
+/* ---------- 千里江山（多层青绿山峦） ---------- */
+function buildLandscape() {
+  const o = alloc();
+  const layers = 6;
+  const per = Math.floor(N / layers);
+  const cDeep = new THREE.Color('#0b2f4a');
+  const cBlue = new THREE.Color('#17577f');
+  const cJade = new THREE.Color('#2f8f6e');
+  const cGreen = new THREE.Color('#16543f');
+  const cGold = new THREE.Color('#e8cf94');
+  const cMist = new THREE.Color('#bcd9e8');
+  const c = new THREE.Color();
+  let idx = 0;
+  for (let L = 0; L < layers; L++) {
+    const far = 1 - L / (layers - 1);            // 1 = 最远
+    const z0 = -1.95 + L * 0.78;
+    const baseY = -2.25 + far * 1.35;            // 远山基线更高，形成层叠
+    const amp = 2.45 - far * 1.30;               // 近山更高
+    const sc = 0.52 + L * 0.14;
+    const seed = L * 2.73 + 1.1;
+    for (let j = 0; j < per && idx < N; j++, idx++) {
+      const x = (R() * 2 - 1) * 3.0;
+      const prof = 0.5 * (1 + 0.55 * Math.sin(x * sc * 1.1 + seed)
+        + 0.27 * Math.sin(x * sc * 2.35 + seed * 1.7)
+        + 0.13 * Math.sin(x * sc * 5.1 + seed * 2.9)
+        + 0.06 * Math.sin(x * sc * 9.7 + seed * 4.3));
+      const peak = Math.pow(clamp(prof, 0, 1), 1.9);      // 尖锐山脊
+      const h = baseY + amp * peak;
+      const rel = 1 - Math.pow(R(), 1.7);                 // 越靠山脊越密
+      const y = baseY + (h - baseY) * rel;
+      const z = z0 + (R() - 0.5) * 0.35;
+
+      if (rel < 0.35) c.copy(cDeep).lerp(cBlue, rel / 0.35);
+      else if (rel < 0.76) c.copy(cBlue).lerp(cJade, (rel - 0.35) / 0.41);
+      else c.copy(cJade).lerp(cGreen, (rel - 0.76) / 0.24);
+      c.lerp(cGold, Math.pow(clamp(rel, 0, 1), 6) * 0.65);  // 山脊描金
+      c.lerp(cMist, 0.50 * far * far);                      // 空气透视
+      c.multiplyScalar(0.12 + 0.95 * Math.pow(rel, 0.55));  // 山脚渐隐，避免横向亮带
+      put(o, idx, x, y, z, c);
+    }
+  }
+  // 底部水面与雾带
+  while (idx < N) {
+    const x = (R() * 2 - 1) * 3.2;
+    const y = -2.18 + Math.pow(R(), 2) * 0.22;
+    const z = (R() * 2 - 1) * 1.9;
+    c.copy(cMist).lerp(cBlue, R() * 0.8).multiplyScalar(0.5 + R() * 0.5);
+    put(o, idx++, x, y, z, c);
+  }
+  return { pos: o.pos, col: o.col, palette: '#2f8f6e', expo: 1.05 };
+}
+
+/* ---------- 昙花（花冠朝向镜头，花茎垂在下方） ---------- */
+function buildEpiphyllum() {
+  const o = alloc();
+  const cWhite = new THREE.Color('#f2e5c8');
+  const cCream = new THREE.Color('#d9c79b');
+  const cPink = new THREE.Color('#f7cfda');
+  const cGold = new THREE.Color('#ffd479');
+  const cStem = new THREE.Color('#7fa86a');
+  const cStem2 = new THREE.Color('#a9c98f');
+  const cStamen = new THREE.Color('#fff6d8');
+  const c = new THREE.Color();
+
+  for (let i = 0; i < N; i++) {
+    const r = R();
+    if (r < 0.05) {
+      // 花茎
+      const y = -2.0 + R() * 1.15;
+      const sway = 0.10 * Math.sin((y + 2) * 2.0);
+      c.copy(cStem).lerp(cStem2, R() * 0.5).multiplyScalar(0.8);
+      put(o, i, sway + (R() - 0.5) * 0.04, y, -0.42 + (R() - 0.5) * 0.04, c);
+    } else if (r < 0.16) {
+      // 花筒：从花茎弯向花心
+      const u = R();
+      const y = -0.92 + u * 0.82;
+      const rad = 0.05 + 0.24 * Math.pow(u, 1.4);
+      const a = R() * TAU;
+      const z = -0.42 + 0.44 * Math.pow(u, 1.3);
+      c.copy(cCream).lerp(cWhite, u).multiplyScalar(0.40);
+      put(o, i, Math.cos(a) * rad, y + Math.sin(a) * rad * 0.5, z, c);
+    } else if (r < 0.24) {
+      // 花蕊
+      const k = (R() * 34) | 0, a = k / 34 * TAU + R() * 0.2;
+      const u = R(), len = 0.34 + R() * 0.24;
+      const rad = 0.04 + u * len;
+      const z = 0.06 + u * len * 0.75;
+      const y = -0.08 + u * len * 0.25;
+      c.copy(cGold).lerp(cStamen, R() * 0.45).multiplyScalar(0.95);
+      put(o, i, Math.cos(a) * rad, y + Math.sin(a) * rad, z, c);
+    } else {
+      // 花瓣：外瓣下垂后卷，内瓣向上前卷
+      const outer = R() < 0.52;
+      const cnt = outer ? 10 : 9;
+      const k = (R() * cnt) | 0;
+      const a = k / cnt * TAU + 0.2 + (R() - 0.5) * 0.14;
+      const u = Math.pow(R(), 0.78);
+      const wd = 0.44 * Math.sin(Math.PI * Math.pow(u, 0.72)) * (1 - 0.24 * u);
+      const lat = (R() * 2 - 1) * wd;
+      const rad = outer ? 0.18 + 1.36 * u : 0.12 + 0.70 * u;
+      const x = Math.cos(a) * rad - Math.sin(a) * lat;
+      const y = Math.sin(a) * rad + Math.cos(a) * lat
+        - 0.10 - (outer ? 0.30 * Math.pow(u, 1.8) : 0);
+      const z = (outer ? -0.34 : 0.44) * Math.pow(u, 1.7) + lat * lat * 0.5;
+      c.copy(cCream).lerp(cWhite, u).lerp(cPink, Math.pow(R(), 2) * 0.42).multiplyScalar(0.82);
+      put(o, i, x, y, z, c);
+    }
+  }
+  return { pos: o.pos, col: o.col, palette: '#e9dcc0', expo: 0.52 };
+}
+
+/* =========================================================
+   3. 注册表
+   ========================================================= */
+const MODEL_DEFS = [
+  { key: 'heart', name: '爱心' },
+  { key: 'flower', name: '花朵' },
+  { key: 'saturn', name: '土星' },
+  { key: 'firework', name: '烟花' },
+  { key: 'earth', name: '地球' },
+  { key: 'epiphyllum', name: '昙花' },
+  { key: 'landscape', name: '千里江山', wide: true }
+];
+const BUILDERS = {
+  heart: buildHeart, flower: buildFlower, saturn: buildSaturn, firework: buildFirework,
+  earth: buildEarth, landscape: buildLandscape, epiphyllum: buildEpiphyllum
+};
+const cache = {};
+function ensureModel(key) {
+  if (!cache[key]) cache[key] = BUILDERS[key]();
+  return cache[key];
+}
+
+/* =========================================================
+   4. 场景
+   ========================================================= */
+const canvas = document.getElementById('scene');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (e) {
+  boot.classList.add('err');
+  bootText.textContent = '当前浏览器不支持 WebGL';
+  bootSub.textContent = '请使用最新版 Chrome / Edge / Safari 打开。';
+  throw e;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x05060a, 1);
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace; // 自写 shader 直接输出，不做二次转换
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 0, 7.2);
+
+const group = new THREE.Group();
+scene.add(group);
+
+/* 星空 */
+(function stars() {
+  const cnt = 1400, p = new Float32Array(cnt * 3), c = new Float32Array(cnt * 3);
+  const col = new THREE.Color();
+  for (let i = 0; i < cnt; i++) {
+    const d = unitSphere(), r = 26 + R() * 30;
+    p[i*3] = d[0]*r; p[i*3+1] = d[1]*r; p[i*3+2] = d[2]*r;
+    col.setHSL(0.55 + R()*0.12, 0.55, 0.35 + R()*0.45);
+    c[i*3] = col.r; c[i*3+1] = col.g; c[i*3+2] = col.b;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  const m = new THREE.PointsMaterial({
+    size: 0.16, vertexColors: true, transparent: true, opacity: 0.8,
+    depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
+  });
+  const pts = new THREE.Points(g, m);
+  pts.frustumCulled = false;
+  scene.add(pts);
+})();
+
+/* 粒子几何 */
+const geo = new THREE.BufferGeometry();
+const posAttr = new THREE.BufferAttribute(new Float32Array(N * 3), 3);
+const posA = new THREE.BufferAttribute(new Float32Array(N * 3), 3);
+const colAttr = new THREE.BufferAttribute(new Float32Array(N * 3), 3);
+const rndArr = new Float32Array(N * 3);
+for (let i = 0; i < N * 3; i++) rndArr[i] = R();
+const rndAttr = new THREE.BufferAttribute(rndArr, 3);
+posAttr.setUsage(THREE.DynamicDrawUsage);
+posA.setUsage(THREE.DynamicDrawUsage);
+colAttr.setUsage(THREE.DynamicDrawUsage);
+geo.setAttribute('position', posAttr);
+geo.setAttribute('aPosA', posA);
+geo.setAttribute('aColor', colAttr);
+geo.setAttribute('aRand', rndAttr);
+geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 12);
+
+/* 共享 uniform */
+const U = {
+  uTime:    { value: 0 },
+  uMorph:   { value: 1 },
+  uScale:   { value: 1 },
+  uDiffuse: { value: 0 },
+  uSize:    { value: 1 },
+  uPR:      { value: renderer.getPixelRatio() },
+  uTint:    { value: new THREE.Color('#ffffff') },
+  uTintMix: { value: 0 }
+};
+
+const VERT = /* glsl */`
+  uniform float uTime, uMorph, uScale, uDiffuse, uSize, uPR, uTintMix, uSizeScale, uAlpha;
+  uniform vec3 uTint;
+  attribute vec3 aPosA, aColor, aRand;
+  varying vec3 vColor;
+  varying float vAlpha;
+
+  void main(){
+    vec3 pA = aPosA;
+    vec3 pB = position;
+    vec3 p  = mix(pA, pB, uMorph);
+
+    float len = length(p);
+    vec3 dir = len > 0.0001 ? p / len : vec3(0.0, 1.0, 0.0);
+
+    p *= uScale;
+    p += dir * uDiffuse * (0.35 + aRand.x * 1.55);
+
+    float t = uTime;
+    p += vec3(sin(t * 0.9 + aRand.x * 6.283),
+              cos(t * 0.8 + aRand.y * 6.283),
+              sin(t * 0.7 + aRand.z * 6.283)) * (0.005 + 0.022 * uDiffuse);
+
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_Position = projectionMatrix * mv;
+
+    float tw = 0.72 + 0.45 * sin(t * 2.1 + aRand.y * 34.0);
+    float sz = uSize * uSizeScale * uPR * (0.55 + aRand.z * 0.95) * (16.0 / max(-mv.z, 0.1));
+    gl_PointSize = clamp(sz, 1.0, 22.0 * uPR);
+
+    vec3 tinted = uTint * (0.55 + 0.85 * aRand.y);
+    vColor = mix(aColor, tinted, uTintMix);
+    vAlpha = (0.55 + 0.45 * tw) * uAlpha;
+    vColor *= (0.85 + 0.35 * tw);
+  }
+`;
+const FRAG = /* glsl */`
+  varying vec3 vColor;
+  varying float vAlpha;
+  void main(){
+    vec2 uv = gl_PointCoord - 0.5;
+    float d = length(uv);
+    if (d > 0.5) discard;
+    float a = smoothstep(0.5, 0.03, d);
+    a = pow(a, 1.5);
+    gl_FragColor = vec4(vColor * (1.0 + 0.22 * a) * 0.92, a * vAlpha);
+  }
+`;
+function makeMat(sizeScale, alpha) {
+  return new THREE.ShaderMaterial({
+    uniforms: Object.assign({}, U, {
+      uSizeScale: { value: sizeScale },
+      uAlpha: { value: alpha }
+    }),
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.AdditiveBlending,
+    vertexShader: VERT,
+    fragmentShader: FRAG
+  });
+}
+/* 主层 + 光晕层（低成本泛光） */
+const matMain = makeMat(1.0, 0.30);
+const matHalo = makeMat(3.8, 0.035);
+
+const ptsMain = new THREE.Points(geo, matMain);
+const ptsHalo = new THREE.Points(geo, matHalo);
+ptsMain.frustumCulled = false;
+ptsHalo.frustumCulled = false;
+ptsMain.renderOrder = 2;
+ptsHalo.renderOrder = 1;
+group.add(ptsHalo);
+group.add(ptsMain);
+
+/* =========================================================
+   5. 状态
+   ========================================================= */
+const state = {
+  rotX: 0, rotY: 0, rotXV: 0, rotYV: 0,
+  zoom: 7.2, zoomTarget: 7.2,
+  scale: 1, scaleTarget: 1,
+  spread: 0, spreadTarget: 0,
+  baseSpread: 0,
+  size: 1,
+  morphT: 1, colFrom: null, colTo: null,
+  current: 'heart',
+  tintMix: 0, tintMixTarget: 0,
+  useCustom: false
+};
+
+/* =========================================================
+   6. 切换形态
+   ========================================================= */
+const modelsEl = document.getElementById('models');
+MODEL_DEFS.forEach(def => {
+  const b = document.createElement('button');
+  b.className = 'chip' + (def.wide ? ' wide' : '');
+  b.textContent = def.name;
+  b.dataset.key = def.key;
+  b.onclick = () => setModel(def.key);
+  modelsEl.appendChild(b);
+});
+
+const picker = document.getElementById('colorPick');
+const fill = document.getElementById('swatchFill');
+const hexLabel = document.getElementById('hexLabel');
+
+function setModel(key) {
+  const m = ensureModel(key);
+  const curB = posAttr.array, curA = posA.array, curC = colAttr.array;
+  const e = easeIO(Math.min(1, state.morphT));
+
+  const fromPos = new Float32Array(N * 3);
+  for (let i = 0; i < N * 3; i++) fromPos[i] = curA[i] + (curB[i] - curA[i]) * e;
+
+  curA.set(fromPos);
+  curB.set(m.pos);
+  state.colFrom = Float32Array.from(curC);
+  state.colTo = m.col;
+  curC.set(m.col);
+
+  posA.needsUpdate = true;
+  posAttr.needsUpdate = true;
+  colAttr.needsUpdate = true;
+
+  state.morphT = 0;
+  state.current = key;
+
+  // 不同形态的粒子密度差异很大，用曝光系数控制叠加亮度
+  const ex = m.expo || 1;
+  matMain.uniforms.uAlpha.value = 0.30 * ex;
+  matHalo.uniforms.uAlpha.value = 0.035 * ex;
+
+  if (!state.useCustom) {
+    picker.value = m.palette.toLowerCase();
+    fill.style.background = m.palette;
+    hexLabel.textContent = m.palette.toUpperCase();
+    U.uTint.value.set(m.palette);
+  }
+
+  document.querySelectorAll('.chip').forEach(el =>
+    el.classList.toggle('on', el.dataset.key === key));
+}
+
+/* =========================================================
+   7. UI
+   ========================================================= */
+const btnOrigin = document.getElementById('btnOrigin');
+const sizeRange = document.getElementById('sizeRange');
+const spreadRange = document.getElementById('spreadRange');
+const vSize = document.getElementById('vSize');
+const vSpread = document.getElementById('vSpread');
+const btnCam = document.getElementById('btnCam');
+const btnFull = document.getElementById('btnFull');
+const dotEl = document.getElementById('dot');
+const statusText = document.getElementById('statusText');
+const preview = document.getElementById('preview');
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+
+picker.addEventListener('input', () => {
+  U.uTint.value.set(picker.value);
+  state.useCustom = true;
+  state.tintMixTarget = 1;
+  fill.style.background = picker.value;
+  hexLabel.textContent = picker.value.toUpperCase();
+});
+btnOrigin.onclick = () => {
+  state.useCustom = false;
+  state.tintMixTarget = 0;
+  const p = ensureModel(state.current).palette;
+  picker.value = p.toLowerCase();
+  fill.style.background = p;
+  hexLabel.textContent = p.toUpperCase();
+  U.uTint.value.set(p);
+};
+sizeRange.oninput = () => {
+  state.size = parseFloat(sizeRange.value);
+  vSize.textContent = state.size.toFixed(2);
+};
+spreadRange.oninput = () => {
+  state.baseSpread = parseFloat(spreadRange.value);
+  vSpread.textContent = state.baseSpread.toFixed(2);
+};
+btnFull.onclick = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  } else {
+    document.exitFullscreen?.();
+  }
+};
+document.addEventListener('fullscreenchange', () => {
+  btnFull.style.color = document.fullscreenElement ? 'var(--accent)' : '';
+});
+
+/* =========================================================
+   8. 指针交互
+   ========================================================= */
+let dragging = false, lastX = 0, lastY = 0;
+canvas.addEventListener('pointerdown', e => {
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  canvas.setPointerCapture?.(e.pointerId);
+});
+canvas.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  state.rotY += dx * 0.006;
+  state.rotX += dy * 0.006;
+  state.rotYV = dx * 0.3;
+  state.rotXV = dy * 0.3;
+});
+const endDrag = () => { dragging = false; };
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  state.zoomTarget = clamp(state.zoomTarget + e.deltaY * 0.0022, 3.0, 13.5);
+}, { passive: false });
+window.addEventListener('keydown', e => {
+  if (e.key === 'f' || e.key === 'F') { btnFull.click(); }
+  if (e.key === ' ') { e.preventDefault(); state.rotX = 0; state.rotY = 0; state.zoomTarget = 7.2; }
+});
+
+/* =========================================================
+   9. 手势识别
+   ========================================================= */
+let handLandmarker = null, camStream = null, lastVideoTime = -1, lastDetect = 0;
+const hand = {
+  ready: false, active: false, mode: 'none', fingers: 0,
+  openness: 0, handSize: 0, lastSeen: 0, lastMoveT: 0,
+  prevX: 0.5, prevY: 0.5
+};
+
+const CONN = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],
+  [13,17],[17,18],[18,19],[19,20],[0,17]
+];
+
+const MP_URLS = [
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs',
+  'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs'
+];
+
+async function startCamera() {
+  if (hand.ready || btnCam.disabled) return;
+  btnCam.disabled = true;
+  btnCam.textContent = '正在加载手势模型…';
+  try {
+    let vision = null, used = MP_URLS[0];
+    for (const u of MP_URLS) {
+      try { vision = await import(u); used = u; break; } catch (e) {}
+    }
+    if (!vision) throw new Error('mediapipe 加载失败');
+    const base = used.replace('/vision_bundle.mjs', '');
+    const fileset = await vision.FilesetResolver.forVisionTasks(base + '/wasm');
+    const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+    const makeLandmarker = (delegate) => vision.HandLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: MODEL_URL, delegate },
+      runningMode: 'VIDEO',
+      numHands: 1
+    });
+    try {
+      handLandmarker = await makeLandmarker('GPU');
+    } catch (e) {
+      handLandmarker = await makeLandmarker('CPU');
+    }
+
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480, facingMode: 'user' }
+    });
+    video.srcObject = camStream;
+    await video.play();
+    if (!video.videoWidth) {
+      await new Promise(res => { video.onloadedmetadata = () => res(); });
+    }
+    overlay.width = video.videoWidth || 640;
+    overlay.height = video.videoHeight || 480;
+
+    preview.classList.add('show');
+    btnCam.textContent = '关闭摄像头手势';
+    btnCam.classList.add('on');
+    btnCam.disabled = false;
+    dotEl.classList.remove('warn');
+    dotEl.classList.add('live');
+    statusText.textContent = '已就绪 · 把手放进画面';
+    hand.ready = true;
+  } catch (err) {
+    console.warn(err);
+    btnCam.disabled = false;
+    btnCam.textContent = '开启摄像头手势';
+    dotEl.classList.add('warn');
+    statusText.textContent = location.protocol === 'file:'
+      ? '摄像头被浏览器限制（file://）：可用鼠标操作，或用本地服务打开'
+      : '摄像头不可用：请允许权限并确认网络可访问 CDN';
+  }
+}
+
+function stopCamera() {
+  try { camStream?.getTracks().forEach(t => t.stop()); } catch (e) {}
+  camStream = null;
+  preview.classList.remove('show');
+  btnCam.classList.remove('on');
+  btnCam.textContent = '开启摄像头手势';
+  dotEl.classList.remove('live');
+  statusText.textContent = '已关闭 · 使用鼠标操作';
+  hand.ready = false;
+  hand.active = false;
+  hand.mode = 'none';
+  state.scaleTarget = 1;
+  state.spreadTarget = 0;
+  state.zoomTarget = 7.2;
+}
+btnCam.onclick = () => { hand.ready ? stopCamera() : startCamera(); };
+
+const d2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+function drawOverlay(lm) {
+  const ctx = overlay.getContext('2d');
+  const w = overlay.width, h = overlay.height;
+  ctx.save();
+  ctx.clearRect(0, 0, w, h);
+  ctx.translate(w, 0);
+  ctx.scale(-1, 1);
+  try { ctx.drawImage(video, 0, 0, w, h); } catch (e) {}
+  if (lm) {
+    ctx.strokeStyle = 'rgba(99,230,255,.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    CONN.forEach(([a, b]) => {
+      ctx.moveTo(lm[a].x * w, lm[a].y * h);
+      ctx.lineTo(lm[b].x * w, lm[b].y * h);
+    });
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    lm.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x * w, p.y * h, 2.2, 0, TAU);
+      ctx.fill();
+    });
+  }
+  ctx.restore();
+}
+
+function processHand(res) {
+  const now = performance.now();
+  const lm = res?.landmarks?.[0];
+
+  if (!lm) {
+    if (now - hand.lastSeen > 380) {
+      hand.active = false;
+      hand.mode = 'none';
+      hand.fingers = 0;
+      state.scaleTarget = 1;
+      state.spreadTarget = 0;
+      state.zoomTarget = lerp(state.zoomTarget, 7.2, 0.06);
+      statusText.textContent = '未检测到手 · 把手放进画面';
+    }
+    drawOverlay(null);
+    return;
+  }
+
+  hand.lastSeen = now;
+  hand.active = true;
+
+  const W = lm[0], M9 = lm[9];
+  const hs = Math.max(0.02, d2(W, M9));
+  const tips = [8, 12, 16, 20], pips = [6, 10, 14, 18];
+
+  let ext = 0, sum = 0;
+  for (let i = 0; i < 4; i++) {
+    const dt = d2(W, lm[tips[i]]), dp = d2(W, lm[pips[i]]);
+    if (dt > dp * 1.08) ext++;
+    sum += dt / hs;
+  }
+  const thumbOut = d2(lm[4], lm[5]) > hs * 0.62;
+  const openness = clamp((sum / 4 - 1.22) / 0.72, 0, 1);
+
+  const tip = lm[8];
+  const tx = 1 - tip.x, ty = tip.y;
+  const dtSec = Math.max(0.016, (now - (hand.lastMoveT || now - 16)) / 1000);
+  hand.lastMoveT = now;
+  const vx = (tx - hand.prevX) / dtSec, vy = (ty - hand.prevY) / dtSec;
+  hand.prevX = hand.prevX * 0.4 + tx * 0.6;
+  hand.prevY = hand.prevY * 0.4 + ty * 0.6;
+
+  hand.fingers = ext + (thumbOut ? 1 : 0);
+  hand.openness = openness;
+  hand.handSize = hs;
+
+  if (ext >= 4 || (ext === 3 && thumbOut)) {
+    hand.mode = 'open';
+    state.scaleTarget = 0.58 + 0.92 * openness;
+    state.spreadTarget = 0.62 * Math.pow(openness, 1.25);
+    statusText.textContent = '手掌张开 · 缩放 ' + state.scaleTarget.toFixed(2) +
+      ' · 扩散 ' + state.spreadTarget.toFixed(2);
+  } else if (ext === 0) {
+    hand.mode = 'fist';
+    state.scaleTarget = 0.4;
+    state.spreadTarget = 0;
+    statusText.textContent = '握拳 · 粒子向心收缩';
+  } else if (ext === 1) {
+    hand.mode = 'point';
+    state.rotYV = lerp(state.rotYV, clamp(vx * 5.2, -5, 5), 0.35);
+    state.rotXV = lerp(state.rotXV, clamp(vy * 4.2, -4.5, 4.5), 0.35);
+    const near = clamp((hs - 0.155) / (0.40 - 0.155), 0, 1);
+    state.zoomTarget = lerp(9.0, 3.4, near);
+    state.scaleTarget = lerp(state.scaleTarget, 1.0, 0.05);
+    state.spreadTarget = lerp(state.spreadTarget, 0.06, 0.05);
+    statusText.textContent = '单指 · 摇摆旋转 · 远近 ' + state.zoomTarget.toFixed(1);
+  } else {
+    hand.mode = 'hold';
+    statusText.textContent = '手势切换中…';
+  }
+
+  drawOverlay(lm);
+}
+
+/* =========================================================
+   10. 主循环
+   ========================================================= */
+const clock = new THREE.Clock();
+let elapsed = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.05, clock.getDelta());
+  elapsed += dt;
+
+  if (hand.ready && handLandmarker && video.readyState >= 2) {
+    const now = performance.now();
+    if (now - lastDetect > 33 && video.currentTime !== lastVideoTime) {
+      lastVideoTime = video.currentTime;
+      lastDetect = now;
+      try { processHand(handLandmarker.detectForVideo(video, now)); } catch (e) {}
+    }
+  }
+
+  /* 形变 */
+  if (state.morphT < 1) {
+    state.morphT = Math.min(1, state.morphT + dt / 1.55);
+    const e = easeIO(state.morphT);
+    U.uMorph.value = e;
+    if (state.colFrom && state.colTo) {
+      const c = colAttr.array, f = state.colFrom, t = state.colTo;
+      for (let i = 0; i < N * 3; i++) c[i] = f[i] + (t[i] - f[i]) * e;
+      colAttr.needsUpdate = true;
+    }
+  } else if (state.colFrom) {
+    state.colFrom = null;
+    state.colTo = null;
+  }
+
+  /* 平滑 */
+  const kFast = 1 - Math.exp(-9 * dt);
+  const kSlow = 1 - Math.exp(-4.5 * dt);
+
+  state.scale = lerp(state.scale, state.scaleTarget, kFast);
+  const morphBurst = state.morphT < 1 ? Math.sin(Math.PI * easeIO(state.morphT)) * 0.42 : 0;
+  const spreadGoal = Math.max(state.spreadTarget, state.baseSpread) + morphBurst;
+  state.spread = lerp(state.spread, spreadGoal, kSlow);
+  state.zoom = lerp(state.zoom, state.zoomTarget, kFast);
+
+  state.rotX += state.rotXV * dt;
+  state.rotY += state.rotYV * dt;
+  const damp = Math.exp(-3.4 * dt);
+  state.rotXV *= damp;
+  state.rotYV *= damp;
+  if (!dragging && hand.mode !== 'point' && Math.abs(state.rotYV) < 0.05) {
+    state.rotY += 0.135 * dt;
+  }
+
+  U.uTime.value = elapsed;
+  U.uScale.value = state.scale;
+  U.uDiffuse.value = state.spread;
+  U.uSize.value = state.size;
+  U.uPR.value = renderer.getPixelRatio();
+  state.tintMix = lerp(state.tintMix, state.tintMixTarget, kSlow);
+  U.uTintMix.value = state.tintMix;
+
+  group.rotation.x = state.rotX;
+  group.rotation.y = state.rotY;
+  group.scale.setScalar(1 + Math.sin(elapsed * 0.55) * 0.012);
+  camera.position.z = state.zoom;
+
+  renderer.render(scene, camera);
+}
+
+/* =========================================================
+   11. 自适应 & 启动
+   ========================================================= */
+window.addEventListener('resize', () => {
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(w, h);
+  U.uPR.value = renderer.getPixelRatio();
+});
+
+setModel('heart');
+animate();
+boot.classList.add('hide');
+setTimeout(() => boot.remove(), 700);
+</script>
+</body>
+</html>
